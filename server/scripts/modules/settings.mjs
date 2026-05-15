@@ -347,21 +347,21 @@ const init = () => {
 		sticky: true,
 		changeAction: dispatchCustomMusicChange,
 	});
-  settings.customMusicSource = new Setting('customMusicSource', {
-    name: 'Music Source',
-    type: 'string',
-    defaultValue: getLegacyCustomMusicSource(),
-    sticky: true,
-    placeholder: 'Paste a Spotify playlist or YouTube link',
-    callChangeActionOnInit: false,
-    changeAction: dispatchCustomMusicChange,
-  });
-  settings.customLogoImage = new Setting('customLogoImage', {
-    name: 'Custom Logo PNG',
-    defaultValue: false,
-    changeAction: customLogoImageChange,
-    sticky: true,
-  });
+	settings.customMusicSource = new Setting('customMusicSource', {
+		name: 'Music Source',
+		type: 'string',
+		defaultValue: getLegacyCustomMusicSource(),
+		sticky: true,
+		placeholder: 'Paste a Spotify playlist or YouTube link',
+		callChangeActionOnInit: false,
+		changeAction: dispatchCustomMusicChange,
+	});
+	settings.customLogoImage = new Setting('customLogoImage', {
+		name: 'Custom Logo PNG',
+		defaultValue: false,
+		changeAction: customLogoImageChange,
+		sticky: true,
+	});
 	settings.refreshTime = new Setting('refreshTime', {
 		type: 'select',
 		defaultValue: 600_000,
