@@ -263,6 +263,22 @@ const unitChange = () => {
 	unitChange.firstRunDone = true;
 };
 
+const dispatchCustomMusicChange = () => {
+	window.dispatchEvent(new Event('custom-music-change'));
+};
+
+const getLegacyCustomMusicSource = () => {
+	try {
+		const stored = JSON.parse(localStorage?.getItem('Settings') ?? '{}');
+		return stored.customMusicSource
+			?? stored.youtubeUrl
+			?? stored.spotifyPlaylist
+			?? '';
+	} catch (_e) {
+		return '';
+	}
+};
+
 const init = () => {
 	// create settings see setting.mjs for defaults
 	settings.wide = new Setting('wide', {
@@ -324,12 +340,28 @@ const init = () => {
 			['si', 'Metric'],
 		],
 	});
-	settings.customLogoImage = new Setting('customLogoImage', {
-		name: 'Custom Logo PNG',
-		defaultValue: false,
-		changeAction: customLogoImageChange,
+	settings.customMusicEnabled = new Setting('customMusicEnabled', {
+		name: 'Enable Custom Music',
+		type: 'checkbox',
+		defaultValue: Boolean(getLegacyCustomMusicSource()),
 		sticky: true,
+		changeAction: dispatchCustomMusicChange,
 	});
+  settings.customMusicSource = new Setting('customMusicSource', {
+    name: 'Music Source',
+    type: 'string',
+    defaultValue: getLegacyCustomMusicSource(),
+    sticky: true,
+    placeholder: 'Paste a Spotify playlist or YouTube link',
+    callChangeActionOnInit: false,
+    changeAction: dispatchCustomMusicChange,
+  });
+  settings.customLogoImage = new Setting('customLogoImage', {
+    name: 'Custom Logo PNG',
+    defaultValue: false,
+    changeAction: customLogoImageChange,
+    sticky: true,
+  });
 	settings.refreshTime = new Setting('refreshTime', {
 		type: 'select',
 		defaultValue: 600_000,
