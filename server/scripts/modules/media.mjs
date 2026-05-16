@@ -17,6 +17,7 @@ let youtubePlayer = null;
 let youtubeApiRequested = false;
 let youtubeApiReady = false;
 let youtubePendingMedia = null;
+let youtubeRestartInProgress = false;
 let spotifyLastPlaybackState = null;
 let sliderTimeout = null;
 let volumeSlider = null;
@@ -43,6 +44,9 @@ document.addEventListener('DOMContentLoaded', () => {
 	window.addEventListener('custom-music-change', () => {
 		updateCustomMusicControls();
 	});
+	setInterval(() => {
+		runYouTubeEndOfQueueCheck();
+	}, 1000);
 	volumeSlider = document.querySelector('#ToggleMediaContainer .volume-slider');
 	volumeSliderInput = volumeSlider.querySelector('input');
 
@@ -112,13 +116,18 @@ const youtubeEmbedUrl = (media) => {
 		autoplay: '1',
 		playsinline: '1',
 		rel: '0',
+		loop: '1',
 		enablejsapi: '1',
 		origin: window.location.origin,
 	});
 	if (media.type === 'playlist') {
+		params.set('playlist', media.id);
 		return `https://www.youtube.com/embed/videoseries?list=${encodeURIComponent(media.id)}&${params.toString()}`;
 	}
-	if (media.list) params.set('list', media.list);
+	if (media.list) {
+		params.set('list', media.list);
+		params.set('playlist', media.list);
+	}
 	return `https://www.youtube.com/embed/${encodeURIComponent(media.id)}?${params.toString()}`;
 };
 
@@ -176,68 +185,64 @@ const applyYouTubeMedia = (media) => {
 };
 
 const restartYouTubePlaylistFromStart = (mode) => {
+	if (youtubeRestartInProgress) return;
+	youtubeRestartInProgress = true;
 	const playlistId = mode.mediaType === 'playlist' ? mode.id : mode.list;
-	if (hasYouTubePlayerMethod('playVideoAt')) {
-		youtubePlayer.playVideoAt(0);
-	} else if (playlistId && hasYouTubePlayerMethod('loadPlaylist')) {
+	if (playlistId && hasYouTubePlayerMethod('loadPlaylist')) {
 		youtubePlayer.loadPlaylist({
 			list: playlistId,
 			listType: 'playlist',
 			index: 0,
 			startSeconds: 0,
 		});
+	} else if (hasYouTubePlayerMethod('playVideoAt')) {
+		youtubePlayer.playVideoAt(0);
 	}
-	if (mediaPlaying.value && hasYouTubePlayerMethod('playVideo')) {
-		youtubePlayer.playVideo();
-	}
+	setTimeout(() => {
+		if (mediaPlaying.value && hasYouTubePlayerMethod('playVideo')) {
+			youtubePlayer.playVideo();
+		}
+	}, 50);
 	syncYouTubeAudioState();
+	setTimeout(() => {
+		youtubeRestartInProgress = false;
+	}, 1200);
+};
+
+const runYouTubeEndOfQueueCheck = () => {
+	const mode = getCustomMusicMode();
+	if (mode.type !== 'youtube') return;
+	const isPlaylistMode = mode.mediaType === 'playlist' || mode.list;
+	if (!isPlaylistMode || !mediaPlaying.value || youtubeRestartInProgress) return;
+	if (!hasYouTubePlayerMethod('getPlayerState')) return;
+
+	const state = youtubePlayer.getPlayerState();
+	const maybeEndedState = state === window.YT?.PlayerState?.ENDED
+		|| state === window.YT?.PlayerState?.CUED
+		|| state === window.YT?.PlayerState?.PAUSED;
+	if (!maybeEndedState) return;
+
+	if (hasYouTubePlayerMethod('getDuration') && hasYouTubePlayerMethod('getCurrentTime')) {
+		const duration = youtubePlayer.getDuration();
+		const current = youtubePlayer.getCurrentTime();
+		const nearEnd = duration > 0 && current >= Math.max(0, duration - 0.75);
+		if (!nearEnd && state !== window.YT?.PlayerState?.CUED) return;
+	}
+
+	restartYouTubePlaylistFromStart(mode);
 };
 
 const handleYouTubeStateChange = (event) => {
 	const state = event?.data;
+	const mode = getCustomMusicMode();
+	if (mode.type !== 'youtube') return;
+
 	if (
 		state === window.YT?.PlayerState?.PLAYING
 		|| state === window.YT?.PlayerState?.BUFFERING
 		|| state === window.YT?.PlayerState?.CUED
 	) {
 		syncYouTubeAudioState();
-	}
-	if (state !== window.YT?.PlayerState?.ENDED) return;
-
-	const mode = getCustomMusicMode();
-	if (mode.type !== 'youtube') return;
-
-	if (mode.mediaType === 'playlist' || mode.list) {
-		let handledTransition = false;
-		if (hasYouTubePlayerMethod('getPlaylist') && hasYouTubePlayerMethod('getPlaylistIndex') && hasYouTubePlayerMethod('playVideoAt')) {
-			const playlistItems = youtubePlayer.getPlaylist() ?? [];
-			const currentIndex = youtubePlayer.getPlaylistIndex();
-			const isLastItem = Array.isArray(playlistItems)
-				&& playlistItems.length > 0
-				&& currentIndex >= playlistItems.length - 1;
-			if (isLastItem) {
-				restartYouTubePlaylistFromStart(mode);
-				handledTransition = true;
-			} else if (hasYouTubePlayerMethod('nextVideo')) {
-				const previousIndex = currentIndex;
-				youtubePlayer.nextVideo();
-				handledTransition = true;
-				setTimeout(() => {
-					const stillYouTube = getCustomMusicMode().type === 'youtube';
-					if (!stillYouTube) return;
-					const indexUnchanged = hasYouTubePlayerMethod('getPlaylistIndex')
-						&& youtubePlayer.getPlaylistIndex() === previousIndex;
-					const stillEnded = hasYouTubePlayerMethod('getPlayerState')
-						&& youtubePlayer.getPlayerState() === window.YT?.PlayerState?.ENDED;
-					if (indexUnchanged || stillEnded) {
-						restartYouTubePlaylistFromStart(mode);
-					}
-				}, 300);
-			}
-		}
-		if (!handledTransition) {
-			restartYouTubePlaylistFromStart(mode);
-		}
 	}
 };
 
