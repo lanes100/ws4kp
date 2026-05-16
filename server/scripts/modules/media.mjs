@@ -175,6 +175,24 @@ const applyYouTubeMedia = (media) => {
 	}
 };
 
+const restartYouTubePlaylistFromStart = (mode) => {
+	const playlistId = mode.mediaType === 'playlist' ? mode.id : mode.list;
+	if (hasYouTubePlayerMethod('playVideoAt')) {
+		youtubePlayer.playVideoAt(0);
+	} else if (playlistId && hasYouTubePlayerMethod('loadPlaylist')) {
+		youtubePlayer.loadPlaylist({
+			list: playlistId,
+			listType: 'playlist',
+			index: 0,
+			startSeconds: 0,
+		});
+	}
+	if (mediaPlaying.value && hasYouTubePlayerMethod('playVideo')) {
+		youtubePlayer.playVideo();
+	}
+	syncYouTubeAudioState();
+};
+
 const handleYouTubeStateChange = (event) => {
 	const state = event?.data;
 	if (
@@ -190,6 +208,7 @@ const handleYouTubeStateChange = (event) => {
 	if (mode.type !== 'youtube') return;
 
 	if (mode.mediaType === 'playlist' || mode.list) {
+		let handledTransition = false;
 		if (hasYouTubePlayerMethod('getPlaylist') && hasYouTubePlayerMethod('getPlaylistIndex') && hasYouTubePlayerMethod('playVideoAt')) {
 			const playlistItems = youtubePlayer.getPlaylist() ?? [];
 			const currentIndex = youtubePlayer.getPlaylistIndex();
@@ -197,23 +216,27 @@ const handleYouTubeStateChange = (event) => {
 				&& playlistItems.length > 0
 				&& currentIndex >= playlistItems.length - 1;
 			if (isLastItem) {
-				youtubePlayer.playVideoAt(0);
+				restartYouTubePlaylistFromStart(mode);
+				handledTransition = true;
 			} else if (hasYouTubePlayerMethod('nextVideo')) {
+				const previousIndex = currentIndex;
 				youtubePlayer.nextVideo();
-			}
-		} else if (hasYouTubePlayerMethod('loadPlaylist')) {
-			const playlistId = mode.mediaType === 'playlist' ? mode.id : mode.list;
-			if (playlistId) {
-				youtubePlayer.loadPlaylist({
-					list: playlistId,
-					listType: 'playlist',
-					index: 0,
-					startSeconds: 0,
-				});
+				handledTransition = true;
+				setTimeout(() => {
+					const stillYouTube = getCustomMusicMode().type === 'youtube';
+					if (!stillYouTube) return;
+					const indexUnchanged = hasYouTubePlayerMethod('getPlaylistIndex')
+						&& youtubePlayer.getPlaylistIndex() === previousIndex;
+					const stillEnded = hasYouTubePlayerMethod('getPlayerState')
+						&& youtubePlayer.getPlayerState() === window.YT?.PlayerState?.ENDED;
+					if (indexUnchanged || stillEnded) {
+						restartYouTubePlaylistFromStart(mode);
+					}
+				}, 300);
 			}
 		}
-		if (mediaPlaying.value && hasYouTubePlayerMethod('playVideo')) {
-			youtubePlayer.playVideo();
+		if (!handledTransition) {
+			restartYouTubePlaylistFromStart(mode);
 		}
 	}
 };
